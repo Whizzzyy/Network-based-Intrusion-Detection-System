@@ -1,0 +1,199 @@
+This code is written here according to how it should be run on collab or a notebook.
+
+
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import LabelEncoder
+
+df = pd.read_csv('Portmap.csv', low_memory=False)
+
+# Data preprocessing
+# Replace NaN and infinity values with a finite number
+df.replace([np.inf, -np.inf], np.nan, inplace=True)
+df.fillna(99999, inplace=True)
+
+# Convert categorical columns to numerical format
+le = LabelEncoder()
+for col in df.columns:
+    if df[col].dtype == 'object':
+        df[col] = le.fit_transform(df[col])
+
+# Remove duplicates
+df.drop_duplicates(inplace=True)
+
+from sklearn.feature_selection import RFE
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+X = df.drop(['Label'], axis=1)
+y = df['Label']
+
+corr_matrix = df.corr().abs()
+upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(np.bool_))
+to_drop = [column for column in upper.columns if any(upper[column] > 0.95)]
+df.drop(to_drop, axis=1, inplace=True)
+
+# Recursive Feature Elimination
+estimator = RandomForestClassifier(n_estimators=100)
+selector = RFE(estimator, n_features_to_select=20, step=1)
+X_selected = selector.fit_transform(X, y)
+selected_features = X.columns[selector.support_]
+
+print("Selected features:")
+print(selected_features)
+
+from sklearn.pipeline import Pipeline
+from sklearn.naive_bayes import GaussianNB
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, confusion_matrix, classification_report, roc_auc_score, roc_curve
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.feature_selection import RFE
+
+estimator = RandomForestClassifier(n_estimators=100)
+selector = RFE(estimator, n_features_to_select=10, step=1)
+X = selector.fit_transform(X, y)
+
+# Define the pipeline
+nb_pipeline = Pipeline([
+    ('feature_selection', selector),
+    ('model', GaussianNB())
+])
+
+rf_pipeline = Pipeline([
+    ('feature_selection', selector),
+    ('model', RandomForestClassifier(n_estimators=100))
+])
+
+lr_pipeline = Pipeline([
+    ('feature_selection', selector),
+    ('model', LogisticRegression())
+])
+
+gb_pipeline = Pipeline([
+    ('feature_selection', selector),
+    ('model', GradientBoostingClassifier(n_estimators=100))])
+
+from sklearn.model_selection import train_test_split
+# Train-test split
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+
+from sklearn.pipeline import Pipeline
+import time
+pipelines = [nb_pipeline, rf_pipeline, lr_pipeline, gb_pipeline]
+pipeline_names = ['Naive Bayes', 'Random Forest', 'Linear Regression', 'Gradient Boosting']
+accuracies = []
+durations = []
+predictions = []
+
+for pipeline in pipelines:
+    start_time = time.time()
+    pipeline.fit(X_train, y_train)
+    end_time = time.time()
+    duration = end_time - start_time
+    durations.append(duration)
+    y_pred = pipeline.predict(X_test)
+    accuracy = accuracy_score(y_test, y_pred)
+    accuracies.append(accuracy)
+    predictions.append(y_pred)
+
+# Print the results
+for i in range(len(pipelines)):
+    print(pipeline_names[i], "Accuracy:", accuracies[i])
+    print("Time taken by", pipeline_names[i], ":", durations[i])
+
+import matplotlib.pyplot as plt
+
+plt.bar(pipeline_names, accuracies)
+plt.ylim([0.9, 1.0])
+plt.xlabel('Model')
+plt.ylabel('Accuracy')
+plt.title('Comparison of Model Accuracies')
+plt.show()
+
+import seaborn as sns
+plt.figure(figsize=(12, 8))
+plt.suptitle('Predictions of AI Models', fontsize=20)
+
+plt.subplot(2, 2, 1)
+sns.scatterplot(x=X_test[:, 0], y=X_test[:, 1], hue=predictions[0], palette='Set1')
+plt.title('Naive Bayes')
+
+plt.subplot(2, 2, 2)
+sns.scatterplot(x=X_test[:, 0], y=X_test[:, 1], hue=predictions[1], palette='Set1')
+plt.title('Random Forest')
+
+plt.subplot(2, 2, 3)
+sns.scatterplot(x=X_test[:, 0], y=X_test[:, 1], hue=predictions[2], palette='Set1')
+plt.title('Linear Regression')
+
+plt.subplot(2, 2, 4)
+sns.scatterplot(x=X_test[:, 0], y=X_test[:, 1], hue=predictions[3], palette='Set1')
+plt.title('Gradient Boosting')
+
+plt.tight_layout()
+plt.show()
+
+for i in range(len(pipelines)):
+    print(pipeline_names[i], "Report:\n", classification_report(y_test, pipelines[i].predict(X_test)))
+
+nb_roc_auc = roc_auc_score(y_test, nb_pipeline.predict(X_test))
+rf_roc_auc = roc_auc_score(y_test, rf_pipeline.predict(X_test))
+lr_roc_auc = roc_auc_score(y_test, lr_pipeline.predict(X_test))
+
+
+fpr, tpr, thresholds = roc_curve(y_test, nb_pipeline.predict(X_test))
+plt.figure()
+plt.plot(fpr, tpr, label='Naive Bayes (area = %0.2f)' % nb_roc_auc)
+
+fpr, tpr, thresholds = roc_curve(y_test, rf_pipeline.predict(X_test))
+plt.plot(fpr, tpr, label='Random Forest (area = %0.2f)' % rf_roc_auc)
+
+fpr, tpr, thresholds = roc_curve(y_test, lr_pipeline.predict(X_test))
+plt.plot(fpr, tpr, label='Linear Regression (area = %0.2f)' % lr_roc_auc)
+
+
+plt.plot([0, 1], [0, 1], 'k--')
+plt.xlim([0.0, 1.0])
+plt.ylim([0.0, 1.05])
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Receiver Operating Characteristic')
+plt.legend(loc="lower right")
+plt.show()
+
+ # Confusion Matrix
+nb_cm = confusion_matrix(y_test, nb_pipeline.predict(X_test))
+rf_cm = confusion_matrix(y_test, rf_pipeline.predict(X_test))
+lr_cm = confusion_matrix(y_test, lr_pipeline.predict(X_test))
+gb_cm = confusion_matrix(y_test, gb_pipeline.predict(X_test))
+
+plt.figure(figsize=(12, 8))
+plt.suptitle('Confusion Matrix', fontsize=20)
+
+plt.subplot(2, 2, 1)
+sns.heatmap(nb_cm, annot=True, cmap='Blues', fmt='g', cbar=False)
+plt.title('Naive Bayes')
+
+plt.subplot(2, 2, 2)
+sns.heatmap(rf_cm, annot=True, cmap='Blues', fmt='g', cbar=False)
+plt.title('Random Forest')
+
+plt.subplot(2, 2, 3)
+sns.heatmap(lr_cm, annot=True, cmap='Blues', fmt='g', cbar=False)
+plt.title('Linear Regression')
+
+plt.subplot(2, 2, 4)
+sns.heatmap(gb_cm, annot=True, cmap='Blues', fmt='g', cbar=False)
+plt.title('Gradient Boosting')
+
+plt.tight_layout()
+plt.show()
+
+pred_df = pd.DataFrame({
+    'Naive Bayes': nb_pipeline.predict(X_test),
+    'Random Forest': rf_pipeline.predict(X_test),
+    'Linear Regression': lr_pipeline.predict(X_test),
+    'Gradient Boosting': gb_pipeline.predict(X_test),
+    'True Label': y_test
+})
+sns.pairplot(pred_df, hue='True Label')
+plt.show()
